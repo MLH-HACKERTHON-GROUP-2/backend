@@ -8,20 +8,127 @@ type AuthPayload {
   user: User!
 }
 
+input CompletePatientProfileInput {
+  allergies: String
+  dob: DateTime
+  name: String!
+  sex: String
+}
+
 """
 A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
 """
 scalar DateTime
 
+type Diagnosis {
+  code: String
+  id: ID!
+  notes: String!
+  recordedAt: DateTime!
+}
+
+type Doctor {
+  hospital: Hospital!
+  id: ID!
+  user: User!
+}
+
+type Hospital {
+  address: String
+  consultationFee: Float!
+  doctors: [Doctor!]!
+  id: ID!
+  name: String!
+  wallet: Wallet!
+}
+
 type Mutation {
+  completePatientProfile(input: CompletePatientProfileInput!): Patient!
+  onboardDoctor(input: OnboardDoctorInput!): Doctor!
+  onboardHospital(input: OnboardHospitalInput!): Hospital!
+  onboardPharmacy(input: OnboardPharmacyInput!): Pharmacy!
   refreshToken(refreshToken: String!): AuthPayload!
   requestOtp(input: RequestOtpInput!): Boolean!
+  setPharmacyDrugPrice(input: SetPharmacyDrugPriceInput!): PharmacyDrugPrice!
+  topUpWallet(amount: Float!): Wallet!
   verifyOtp(input: VerifyOtpInput!): AuthPayload!
 }
 
+input OnboardDoctorInput {
+  identifier: String!
+  name: String!
+}
+
+input OnboardHospitalInput {
+  address: String
+  adminIdentifier: String!
+  adminName: String!
+  consultationFee: Float!
+  name: String!
+}
+
+input OnboardPharmacyInput {
+  address: String
+  name: String!
+  userIdentifier: String!
+  userName: String!
+}
+
+type Patient {
+  allergies: String
+  dob: DateTime
+  id: ID!
+  publicId: ID!
+  sessions: [Session!]!
+  sex: String
+  user: User!
+  wallet: Wallet!
+}
+
+type Pharmacy {
+  address: String
+  drugPrices: [PharmacyDrugPrice!]!
+  id: ID!
+  name: String!
+  wallet: Wallet!
+}
+
+type PharmacyDrugPrice {
+  drugName: String!
+  id: ID!
+  price: Float!
+}
+
+type Prescription {
+  createdAt: DateTime!
+  id: ID!
+  items: [PrescriptionItem!]!
+}
+
+type PrescriptionItem {
+  dispensedAt: DateTime
+  dispensedBy: Pharmacy
+  dosage: String!
+  drugName: String!
+  id: ID!
+  instructions: String
+  quantity: Int!
+  status: PrescriptionItemStatus!
+}
+
+enum PrescriptionItemStatus {
+  DISPENSED
+  PENDING
+}
+
 type Query {
+  allHospitals: [Hospital!]!
+  allPharmacies: [Pharmacy!]!
   health: String!
   me: User!
+  myHospital: Hospital!
+  myPatientProfile: Patient!
+  myPharmacy: Pharmacy!
 }
 
 input RequestOtpInput {
@@ -34,6 +141,29 @@ enum Role {
   PATIENT
   PHARMACY
   SYSTEM_ADMIN
+}
+
+type Session {
+  diagnosis: Diagnosis
+  doctor: Doctor!
+  finalizedAt: DateTime
+  hospital: Hospital!
+  id: ID!
+  patient: Patient!
+  prescription: Prescription
+  startedAt: DateTime!
+  status: SessionStatus!
+  vitals: Vitals
+}
+
+enum SessionStatus {
+  ACTIVE
+  FINALIZED
+}
+
+input SetPharmacyDrugPriceInput {
+  drugName: String!
+  price: Float!
 }
 
 type User {
@@ -49,4 +179,49 @@ type User {
 input VerifyOtpInput {
   identifier: String!
   otp: String!
+}
+
+type Vitals {
+  bloodPressure: String
+  id: ID!
+  notes: String
+  pulse: Int
+  recordedAt: DateTime!
+  temperature: Float
+  weightKg: Float
+}
+
+type Wallet {
+  balance: Float!
+  id: ID!
+  ownerType: WalletOwnerType!
+  transactions: [WalletTransaction!]!
+}
+
+enum WalletOwnerType {
+  HOSPITAL
+  PATIENT
+  PHARMACY
+}
+
+type WalletTransaction {
+  amount: Float!
+  counterpartyWalletId: ID
+  createdAt: DateTime!
+  direction: WalletTransactionDirection!
+  id: ID!
+  referenceId: ID
+  referenceType: String
+  type: WalletTransactionType!
+}
+
+enum WalletTransactionDirection {
+  CREDIT
+  DEBIT
+}
+
+enum WalletTransactionType {
+  CONSULTATION
+  MEDICATION
+  TOPUP
 }

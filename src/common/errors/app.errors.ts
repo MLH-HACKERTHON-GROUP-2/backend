@@ -5,6 +5,7 @@ export type AppErrorCode =
   | 'FORBIDDEN'
   | 'NOT_FOUND'
   | 'INVALID_OTP'
+  | 'IDENTIFIER_IN_USE'
   | 'SESSION_ALREADY_ACTIVE'
   | 'SESSION_NOT_ACTIVE'
   | 'TOKEN_EXPIRED'

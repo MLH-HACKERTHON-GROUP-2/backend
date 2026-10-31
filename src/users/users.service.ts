@@ -1,7 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { Patient, Role, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { appError } from '../common/errors/app.errors';
 import { UserModel } from './models/user.model';
+
+function splitIdentifier(identifier: string): { email: string | null; phone: string | null } {
+  const isEmail = identifier.includes('@');
+  return { email: isEmail ? identifier : null, phone: isEmail ? null : identifier };
+}
 
 @Injectable()
 export class UsersService {
@@ -17,15 +23,25 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { id } });
   }
 
-  async createPatientUser(identifier: string): Promise<User> {
-    const isEmail = identifier.includes('@');
+  /** Generic onboarded-user creation (HOSPITAL_ADMIN, DOCTOR, PHARMACY) — the caller links the owning entity separately. */
+  async createUser(role: Role, name: string, identifier: string): Promise<User> {
+    const existing = await this.findByIdentifier(identifier);
+    if (existing) {
+      throw appError('IDENTIFIER_IN_USE', `${identifier} is already registered.`);
+    }
 
+    return this.prisma.user.create({
+      data: { role, name, ...splitIdentifier(identifier) },
+    });
+  }
+
+  /** Self-service signup path: first verifyOtp for an unknown identifier creates a PATIENT + wallet. */
+  async createPatientUser(identifier: string): Promise<User> {
     return this.prisma.user.create({
       data: {
         role: Role.PATIENT,
         name: 'New Patient',
-        email: isEmail ? identifier : null,
-        phone: isEmail ? null : identifier,
+        ...splitIdentifier(identifier),
         patient: {
           create: {
             wallet: {
