@@ -63,6 +63,11 @@ export class WalletService {
     return wallet.id;
   }
 
+  async findWalletIdByPharmacyId(pharmacyId: string): Promise<string> {
+    const wallet = await this.prisma.wallet.findUniqueOrThrow({ where: { pharmacyId } });
+    return wallet.id;
+  }
+
   /** Throws INSUFFICIENT_FUNDS (via the provider) if fromWalletId's balance is too low. */
   async transfer(fromWalletId: string, toWalletId: string, amount: number, type: WalletTransactionType, reference: WalletReference) {
     return this.provider.transfer(fromWalletId, toWalletId, amount, type, reference);

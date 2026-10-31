@@ -50,6 +50,7 @@ type Hospital {
 type Mutation {
   completePatientProfile(input: CompletePatientProfileInput!): Patient!
   createPrescription(input: CreatePrescriptionInput!): Prescription!
+  dispensePrescriptionItem(itemId: ID!): PrescriptionItem!
   finalizeSession(sessionId: ID!): Session!
   generateQrToken: QrToken!
   onboardDoctor(input: OnboardDoctorInput!): Doctor!
@@ -155,6 +156,7 @@ type Query {
   myPatientProfile: Patient!
   myPharmacy: Pharmacy!
   patientByQrToken(token: ID!): Patient!
+  pendingPrescriptionItems(qrToken: ID!): [PrescriptionItem!]!
   session(id: ID!): Session!
 }
 
