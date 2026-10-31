@@ -2,6 +2,51 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+type AuthPayload {
+  accessToken: String!
+  refreshToken: String!
+  user: User!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type Mutation {
+  refreshToken(refreshToken: String!): AuthPayload!
+  requestOtp(input: RequestOtpInput!): Boolean!
+  verifyOtp(input: VerifyOtpInput!): AuthPayload!
+}
+
 type Query {
   health: String!
+  me: User!
+}
+
+input RequestOtpInput {
+  identifier: String!
+}
+
+enum Role {
+  DOCTOR
+  HOSPITAL_ADMIN
+  PATIENT
+  PHARMACY
+  SYSTEM_ADMIN
+}
+
+type User {
+  createdAt: DateTime!
+  email: String
+  id: ID!
+  name: String!
+  phone: String
+  profileComplete: Boolean!
+  role: Role!
+}
+
+input VerifyOtpInput {
+  identifier: String!
+  otp: String!
 }

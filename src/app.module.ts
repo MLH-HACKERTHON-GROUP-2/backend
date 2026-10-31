@@ -6,6 +6,10 @@ import { AppResolver } from './app.resolver';
 import { GraphqlModule } from './graphql/graphql.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { CommonModule } from './common/common.module';
+import { RbacModule } from './rbac/rbac.module';
+import { OtpModule } from './otp/otp.module';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -15,6 +19,10 @@ import { CommonModule } from './common/common.module';
     PrismaModule,
     CommonModule,
     GraphqlModule,
+    RbacModule,
+    OtpModule,
+    AuthModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService, AppResolver],
