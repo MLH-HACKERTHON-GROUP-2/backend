@@ -5,6 +5,9 @@ import { RedisService } from '../common/redis/redis.service';
 import { appError } from '../common/errors/app.errors';
 import { QrTokenService } from '../qr-token/qr-token.service';
 import { DoctorService } from '../doctor/doctor.service';
+import { HospitalService } from '../hospital/hospital.service';
+import { WalletService } from '../wallet/wallet.service';
+import { WalletTransactionType } from '../wallet/enums/wallet.enums';
 import { RecordVitalsInput } from './dto/record-vitals.dto';
 import { RecordDiagnosisInput } from './dto/record-diagnosis.dto';
 import { CreatePrescriptionInput } from './dto/create-prescription.dto';
@@ -16,6 +19,8 @@ export class SessionService {
     private readonly redis: RedisService,
     private readonly qrTokenService: QrTokenService,
     private readonly doctorService: DoctorService,
+    private readonly hospitalService: HospitalService,
+    private readonly walletService: WalletService,
   ) {}
 
   async startSession(doctorUserId: string, qrToken: string): Promise<Session> {
@@ -140,7 +145,18 @@ export class SessionService {
   }
 
   async finalizeSession(doctorUserId: string, sessionId: string): Promise<Session> {
-    await this.getOwnedActiveSession(doctorUserId, sessionId);
+    const session = await this.getOwnedActiveSession(doctorUserId, sessionId);
+    const hospital = await this.hospitalService.findById(session.hospitalId);
+
+    const patientWalletId = await this.walletService.findWalletIdByPatientId(session.patientId);
+    const hospitalWalletId = await this.walletService.findWalletIdByHospitalId(session.hospitalId);
+
+    // Throws INSUFFICIENT_FUNDS before any state changes if the patient
+    // can't afford it — the session is left ACTIVE, nothing partial.
+    await this.walletService.transfer(patientWalletId, hospitalWalletId, hospital.consultationFee, WalletTransactionType.CONSULTATION, {
+      referenceType: 'SESSION',
+      referenceId: session.id,
+    });
 
     return this.prisma.session.update({
       where: { id: sessionId },

@@ -8,6 +8,7 @@ import { WALLET_PROVIDER } from './interfaces/wallet-provider.interface';
 import type { WalletProvider } from './interfaces/wallet-provider.interface';
 import { WalletOwnerType, WalletTransactionType } from './enums/wallet.enums';
 import { WalletModel } from './models/wallet.model';
+import { WalletReference } from './interfaces/wallet-provider.interface';
 
 @Injectable()
 export class WalletService {
@@ -50,6 +51,21 @@ export class WalletService {
   async topUp(walletId: string, amount: number): Promise<Wallet> {
     await this.provider.credit(walletId, amount, WalletTransactionType.TOPUP);
     return this.findById(walletId);
+  }
+
+  async findWalletIdByPatientId(patientId: string): Promise<string> {
+    const wallet = await this.prisma.wallet.findUniqueOrThrow({ where: { patientId } });
+    return wallet.id;
+  }
+
+  async findWalletIdByHospitalId(hospitalId: string): Promise<string> {
+    const wallet = await this.prisma.wallet.findUniqueOrThrow({ where: { hospitalId } });
+    return wallet.id;
+  }
+
+  /** Throws INSUFFICIENT_FUNDS (via the provider) if fromWalletId's balance is too low. */
+  async transfer(fromWalletId: string, toWalletId: string, amount: number, type: WalletTransactionType, reference: WalletReference) {
+    return this.provider.transfer(fromWalletId, toWalletId, amount, type, reference);
   }
 
   async toModel(wallet: Wallet): Promise<WalletModel> {
