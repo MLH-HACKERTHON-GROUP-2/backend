@@ -44,6 +44,7 @@ type Hospital {
 
 type Mutation {
   completePatientProfile(input: CompletePatientProfileInput!): Patient!
+  generateQrToken: QrToken!
   onboardDoctor(input: OnboardDoctorInput!): Doctor!
   onboardHospital(input: OnboardHospitalInput!): Hospital!
   onboardPharmacy(input: OnboardPharmacyInput!): Pharmacy!
@@ -121,6 +122,12 @@ enum PrescriptionItemStatus {
   PENDING
 }
 
+type QrToken {
+  expiresAt: DateTime!
+  qrCodeUrl: String!
+  token: ID!
+}
+
 type Query {
   allHospitals: [Hospital!]!
   allPharmacies: [Pharmacy!]!
@@ -129,6 +136,7 @@ type Query {
   myHospital: Hospital!
   myPatientProfile: Patient!
   myPharmacy: Pharmacy!
+  patientByQrToken(token: ID!): Patient!
 }
 
 input RequestOtpInput {

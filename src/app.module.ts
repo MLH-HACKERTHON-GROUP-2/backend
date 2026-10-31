@@ -15,6 +15,7 @@ import { HospitalModule } from './hospital/hospital.module';
 import { DoctorModule } from './doctor/doctor.module';
 import { PharmacyModule } from './pharmacy/pharmacy.module';
 import { PatientModule } from './patient/patient.module';
+import { QrTokenModule } from './qr-token/qr-token.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { PatientModule } from './patient/patient.module';
     DoctorModule,
     PharmacyModule,
     PatientModule,
+    QrTokenModule,
   ],
   controllers: [AppController],
   providers: [AppService, AppResolver],
