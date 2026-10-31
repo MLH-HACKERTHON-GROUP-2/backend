@@ -1,0 +1,345 @@
+# GraphQL API Contract — Health System PoC
+# This is the frontend/backend contract. Backend implements this; frontend can
+# mock against it (e.g. with a local Apollo mock server or graphql-codegen)
+# without waiting for the real resolvers.
+
+scalar DateTime
+
+# ---------------------------------------------------------------------------
+# Enums
+# ---------------------------------------------------------------------------
+
+enum Role {
+  SYSTEM_ADMIN
+  HOSPITAL_ADMIN
+  DOCTOR
+  PATIENT
+  PHARMACY
+}
+
+enum SessionStatus {
+  ACTIVE
+  FINALIZED
+}
+
+enum PrescriptionItemStatus {
+  PENDING
+  DISPENSED
+}
+
+enum WalletOwnerType {
+  PATIENT
+  HOSPITAL
+  PHARMACY
+}
+
+enum WalletTransactionType {
+  TOPUP
+  CONSULTATION
+  MEDICATION
+}
+
+enum WalletTransactionDirection {
+  CREDIT
+  DEBIT
+}
+
+# ---------------------------------------------------------------------------
+# Core types
+# ---------------------------------------------------------------------------
+
+type User {
+  id: ID!
+  role: Role!
+  email: String
+  phone: String
+  name: String!
+  profileComplete: Boolean!   # false for a PATIENT right after first verifyOtp, until completePatientProfile is called; always true for other roles
+  createdAt: DateTime!
+}
+
+type Patient {
+  id: ID!
+  user: User!
+  publicId: ID!          # stable internal identifier, NOT used in the QR — see QrToken
+  dob: DateTime
+  sex: String
+  allergies: String
+  wallet: Wallet!
+  sessions: [Session!]!
+}
+
+type Hospital {
+  id: ID!
+  name: String!
+  address: String
+  consultationFee: Float!
+  wallet: Wallet!
+  doctors: [Doctor!]!
+}
+
+type Pharmacy {
+  id: ID!
+  name: String!
+  address: String
+  wallet: Wallet!
+  drugPrices: [PharmacyDrugPrice!]!
+}
+
+type PharmacyDrugPrice {
+  id: ID!
+  drugName: String!
+  price: Float!
+}
+
+type Doctor {
+  id: ID!
+  user: User!
+  hospital: Hospital!
+}
+
+type Session {
+  id: ID!
+  patient: Patient!
+  doctor: Doctor!
+  hospital: Hospital!
+  status: SessionStatus!
+  startedAt: DateTime!
+  finalizedAt: DateTime
+  vitals: Vitals
+  diagnosis: Diagnosis
+  prescription: Prescription
+}
+
+type Vitals {
+  id: ID!
+  temperature: Float
+  bloodPressure: String   # e.g. "120/80"
+  pulse: Int
+  weightKg: Float
+  notes: String
+  recordedAt: DateTime!
+}
+
+type Diagnosis {
+  id: ID!
+  notes: String!
+  code: String
+  recordedAt: DateTime!
+}
+
+type Prescription {
+  id: ID!
+  items: [PrescriptionItem!]!
+  createdAt: DateTime!
+}
+
+type PrescriptionItem {
+  id: ID!
+  drugName: String!
+  dosage: String!
+  quantity: Int!
+  instructions: String
+  status: PrescriptionItemStatus!
+  dispensedBy: Pharmacy
+  dispensedAt: DateTime
+}
+
+type Wallet {
+  id: ID!
+  ownerType: WalletOwnerType!
+  balance: Float!
+  transactions: [WalletTransaction!]!
+}
+
+type WalletTransaction {
+  id: ID!
+  type: WalletTransactionType!
+  direction: WalletTransactionDirection!
+  amount: Float!
+  counterpartyWalletId: ID
+  referenceType: String   # "SESSION" | "PRESCRIPTION_ITEM" | "TOPUP"
+  referenceId: ID
+  createdAt: DateTime!
+}
+
+type AuthPayload {
+  accessToken: String!
+  refreshToken: String!
+  user: User!
+}
+
+type QrToken {
+  token: ID!
+  qrCodeUrl: String!     # https://<host>/scan/{token}
+  expiresAt: DateTime!   # issuedAt + 2 minutes
+}
+
+# ---------------------------------------------------------------------------
+# Inputs
+# ---------------------------------------------------------------------------
+
+input RequestOtpInput {
+  identifier: String!   # email or phone
+}
+
+input VerifyOtpInput {
+  identifier: String!
+  otp: String!          # always "000000" in this demo environment
+}
+
+input OnboardHospitalInput {
+  name: String!
+  address: String
+  consultationFee: Float!
+  adminName: String!
+  adminIdentifier: String!   # email or phone for the new Hospital Admin
+}
+
+input OnboardPharmacyInput {
+  name: String!
+  address: String
+  userName: String!
+  userIdentifier: String!
+}
+
+input OnboardDoctorInput {
+  name: String!
+  identifier: String!
+}
+
+input SetPharmacyDrugPriceInput {
+  drugName: String!
+  price: Float!
+}
+
+input CompletePatientProfileInput {
+  name: String!
+  dob: DateTime
+  sex: String
+  allergies: String
+}
+
+input RecordVitalsInput {
+  sessionId: ID!
+  temperature: Float
+  bloodPressure: String
+  pulse: Int
+  weightKg: Float
+  notes: String
+}
+
+input RecordDiagnosisInput {
+  sessionId: ID!
+  notes: String!
+  code: String
+}
+
+input PrescriptionItemInput {
+  drugName: String!
+  dosage: String!
+  quantity: Int!
+  instructions: String
+}
+
+input CreatePrescriptionInput {
+  sessionId: ID!
+  items: [PrescriptionItemInput!]!
+}
+
+# ---------------------------------------------------------------------------
+# Queries
+# ---------------------------------------------------------------------------
+
+type Query {
+  me: User!
+
+  # Patient self-view
+  myPatientProfile: Patient!
+
+  # Doctor/Pharmacy lookup via QR scan. token = the short-lived value scanned
+  # from the QR (not the patient's stable publicId). Errors TOKEN_EXPIRED or
+  # TOKEN_NOT_FOUND if invalid/expired/already-rotated.
+  patientByQrToken(token: ID!): Patient!   # role: DOCTOR, PHARMACY
+
+  # Pharmacy: all PENDING prescription items across any patient's finalized sessions
+  pendingPrescriptionItems(qrToken: ID!): [PrescriptionItem!]!  # role: PHARMACY
+
+  # Hospital admin dashboard
+  myHospital: Hospital!          # role: HOSPITAL_ADMIN
+  hospitalSessions(status: SessionStatus): [Session!]!  # role: HOSPITAL_ADMIN
+
+  # Pharmacy dashboard
+  myPharmacy: Pharmacy!          # role: PHARMACY
+
+  # System admin
+  allHospitals: [Hospital!]!     # role: SYSTEM_ADMIN
+  allPharmacies: [Pharmacy!]!    # role: SYSTEM_ADMIN
+
+  # Doctor
+  myActiveSession: Session       # role: DOCTOR, null if none active
+  session(id: ID!): Session!
+}
+
+# ---------------------------------------------------------------------------
+# Mutations
+# ---------------------------------------------------------------------------
+
+type Mutation {
+  # --- Auth ---
+  requestOtp(input: RequestOtpInput!): Boolean!
+  verifyOtp(input: VerifyOtpInput!): AuthPayload!
+  refreshToken(refreshToken: String!): AuthPayload!
+
+  # --- Onboarding ---
+  onboardHospital(input: OnboardHospitalInput!): Hospital!       # role: SYSTEM_ADMIN
+  onboardPharmacy(input: OnboardPharmacyInput!): Pharmacy!       # role: SYSTEM_ADMIN
+  onboardDoctor(input: OnboardDoctorInput!): Doctor!             # role: HOSPITAL_ADMIN
+  completePatientProfile(input: CompletePatientProfileInput!): Patient!  # role: PATIENT, post-OTP first login
+
+  # --- Pharmacy pricing ---
+  setPharmacyDrugPrice(input: SetPharmacyDrugPriceInput!): PharmacyDrugPrice!  # role: PHARMACY
+
+  # --- Wallet ---
+  topUpWallet(amount: Float!): Wallet!   # role: PATIENT, HOSPITAL_ADMIN, PHARMACY (own wallet only)
+
+  # --- Patient QR ---
+  generateQrToken: QrToken!   # role: PATIENT; rotates/invalidates any previously issued token for this patient
+
+  # --- Session lifecycle ---
+  startSession(qrToken: ID!): Session!      # role: DOCTOR; token must still be valid at call time
+  # Upserts: callable repeatedly while the session is ACTIVE; each call
+  # replaces the previous vitals/diagnosis/prescription for that session.
+  # Errors SESSION_NOT_ACTIVE once the session is finalized.
+  recordVitals(input: RecordVitalsInput!): Vitals!  # role: DOCTOR, session must be ACTIVE and owned by caller
+  recordDiagnosis(input: RecordDiagnosisInput!): Diagnosis!  # role: DOCTOR
+  createPrescription(input: CreatePrescriptionInput!): Prescription!  # role: DOCTOR; replaces all items each call
+  finalizeSession(sessionId: ID!): Session!   # role: DOCTOR; charges consultation fee, blocks on insufficient funds
+
+  # --- Pharmacy fulfillment ---
+  dispensePrescriptionItem(itemId: ID!): PrescriptionItem!  # role: PHARMACY; charges patient, blocks on insufficient funds
+}
+
+# ---------------------------------------------------------------------------
+# Subscriptions (GraphQL subscriptions over WS, Redis pub/sub backed)
+# ---------------------------------------------------------------------------
+
+type PaymentEvent {
+  walletTransactionId: ID!
+  amount: Float!
+  type: WalletTransactionType!
+  success: Boolean!
+  reason: String   # populated when success = false, e.g. "INSUFFICIENT_FUNDS"
+}
+
+type Subscription {
+  # Patient-scoped: fires for the currently authenticated patient
+  sessionStarted: Session!          # role: PATIENT
+  sessionFinalized: Session!        # role: PATIENT
+  prescriptionReady: Prescription!  # role: PATIENT
+  prescriptionDispensed: PrescriptionItem!  # role: PATIENT
+  myPaymentEvents: PaymentEvent!    # role: PATIENT, HOSPITAL_ADMIN, PHARMACY — fires for caller's own wallet
+
+  # Onboarding notifications: fires for the newly created user, once, on their first connection after creation
+  onboardingNotice: User!           # role: HOSPITAL_ADMIN, DOCTOR, PHARMACY
+}
