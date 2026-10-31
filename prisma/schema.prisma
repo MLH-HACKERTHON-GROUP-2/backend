@@ -152,6 +152,10 @@ model Session {
   diagnosis    Diagnosis?
   prescription Prescription?
 
+  // "One ACTIVE session per patient" is enforced in SessionService (Redis
+  // lock + status check), not here — Prisma has no partial/filtered unique
+  // index, and a plain @@unique([patientId, status]) would block a patient
+  // from ever having a second FINALIZED session.
   @@index([patientId, status])
   @@index([doctorId])
 }

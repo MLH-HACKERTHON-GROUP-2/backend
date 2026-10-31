@@ -15,6 +15,11 @@ input CompletePatientProfileInput {
   sex: String
 }
 
+input CreatePrescriptionInput {
+  items: [PrescriptionItemInput!]!
+  sessionId: ID!
+}
+
 """
 A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
 """
@@ -44,13 +49,18 @@ type Hospital {
 
 type Mutation {
   completePatientProfile(input: CompletePatientProfileInput!): Patient!
+  createPrescription(input: CreatePrescriptionInput!): Prescription!
+  finalizeSession(sessionId: ID!): Session!
   generateQrToken: QrToken!
   onboardDoctor(input: OnboardDoctorInput!): Doctor!
   onboardHospital(input: OnboardHospitalInput!): Hospital!
   onboardPharmacy(input: OnboardPharmacyInput!): Pharmacy!
+  recordDiagnosis(input: RecordDiagnosisInput!): Diagnosis!
+  recordVitals(input: RecordVitalsInput!): Vitals!
   refreshToken(refreshToken: String!): AuthPayload!
   requestOtp(input: RequestOtpInput!): Boolean!
   setPharmacyDrugPrice(input: SetPharmacyDrugPriceInput!): PharmacyDrugPrice!
+  startSession(qrToken: ID!): Session!
   topUpWallet(amount: Float!): Wallet!
   verifyOtp(input: VerifyOtpInput!): AuthPayload!
 }
@@ -117,6 +127,13 @@ type PrescriptionItem {
   status: PrescriptionItemStatus!
 }
 
+input PrescriptionItemInput {
+  dosage: String!
+  drugName: String!
+  instructions: String
+  quantity: Int!
+}
+
 enum PrescriptionItemStatus {
   DISPENSED
   PENDING
@@ -133,10 +150,27 @@ type Query {
   allPharmacies: [Pharmacy!]!
   health: String!
   me: User!
+  myActiveSession: Session
   myHospital: Hospital!
   myPatientProfile: Patient!
   myPharmacy: Pharmacy!
   patientByQrToken(token: ID!): Patient!
+  session(id: ID!): Session!
+}
+
+input RecordDiagnosisInput {
+  code: String
+  notes: String!
+  sessionId: ID!
+}
+
+input RecordVitalsInput {
+  bloodPressure: String
+  notes: String
+  pulse: Int
+  sessionId: ID!
+  temperature: Float
+  weightKg: Float
 }
 
 input RequestOtpInput {

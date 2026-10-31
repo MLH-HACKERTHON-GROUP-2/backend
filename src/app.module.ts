@@ -16,6 +16,7 @@ import { DoctorModule } from './doctor/doctor.module';
 import { PharmacyModule } from './pharmacy/pharmacy.module';
 import { PatientModule } from './patient/patient.module';
 import { QrTokenModule } from './qr-token/qr-token.module';
+import { SessionModule } from './session/session.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { QrTokenModule } from './qr-token/qr-token.module';
     PharmacyModule,
     PatientModule,
     QrTokenModule,
+    SessionModule,
   ],
   controllers: [AppController],
   providers: [AppService, AppResolver],

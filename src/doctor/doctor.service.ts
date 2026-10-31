@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Doctor, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { appError } from '../common/errors/app.errors';
 import { UsersService } from '../users/users.service';
 import { HospitalService } from '../hospital/hospital.service';
 import { OnboardDoctorInput } from './dto/onboard-doctor.dto';
@@ -21,6 +22,22 @@ export class DoctorService {
     return this.prisma.doctor.create({
       data: { userId: doctorUser.id, hospitalId: hospital.id },
     });
+  }
+
+  async findByUserId(userId: string): Promise<Doctor> {
+    const doctor = await this.prisma.doctor.findUnique({ where: { userId } });
+    if (!doctor) {
+      throw appError('NOT_FOUND', 'No doctor profile found for this user.');
+    }
+    return doctor;
+  }
+
+  async findById(id: string): Promise<Doctor> {
+    const doctor = await this.prisma.doctor.findUnique({ where: { id } });
+    if (!doctor) {
+      throw appError('NOT_FOUND', 'Doctor not found.');
+    }
+    return doctor;
   }
 
   toModel(doctor: Doctor): DoctorModel {
