@@ -1,0 +1,233 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  SYSTEM_ADMIN
+  HOSPITAL_ADMIN
+  DOCTOR
+  PATIENT
+  PHARMACY
+}
+
+enum SessionStatus {
+  ACTIVE
+  FINALIZED
+}
+
+enum PrescriptionItemStatus {
+  PENDING
+  DISPENSED
+}
+
+enum WalletOwnerType {
+  PATIENT
+  HOSPITAL
+  PHARMACY
+}
+
+enum WalletTransactionType {
+  TOPUP
+  CONSULTATION
+  MEDICATION
+}
+
+enum WalletTransactionDirection {
+  CREDIT
+  DEBIT
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id        String   @id @default(uuid())
+  role      Role
+  email     String?  @unique
+  phone     String?  @unique
+  name      String
+  createdAt DateTime @default(now())
+
+  patient Patient?
+  doctor  Doctor?
+
+  @@index([role])
+}
+
+model Patient {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id])
+  publicId       String   @unique @default(uuid())
+  profileComplete Boolean @default(false)
+  dob            DateTime?
+  sex            String?
+  allergies      String?
+  createdAt      DateTime @default(now())
+
+  wallet   Wallet?
+  sessions Session[]
+}
+
+model Hospital {
+  id              String   @id @default(uuid())
+  name            String
+  address         String?
+  consultationFee Float
+  createdAt       DateTime @default(now())
+
+  wallet   Wallet?
+  doctors  Doctor[]
+  sessions Session[]
+}
+
+model Doctor {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id])
+  hospitalId String
+  hospital   Hospital @relation(fields: [hospitalId], references: [id])
+  createdAt  DateTime @default(now())
+
+  sessions Session[]
+
+  @@index([hospitalId])
+}
+
+model Pharmacy {
+  id        String   @id @default(uuid())
+  name      String
+  address   String?
+  createdAt DateTime @default(now())
+
+  wallet      Wallet?
+  drugPrices  PharmacyDrugPrice[]
+  dispensedItems PrescriptionItem[]
+}
+
+model PharmacyDrugPrice {
+  id         String   @id @default(uuid())
+  pharmacyId String
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id])
+  drugName   String
+  price      Float
+  updatedAt  DateTime @updatedAt
+
+  @@unique([pharmacyId, drugName])
+}
+
+// ---------------------------------------------------------------------------
+// Clinical
+// ---------------------------------------------------------------------------
+
+model Session {
+  id          String        @id @default(uuid())
+  patientId   String
+  patient     Patient       @relation(fields: [patientId], references: [id])
+  doctorId    String
+  doctor      Doctor        @relation(fields: [doctorId], references: [id])
+  hospitalId  String
+  hospital    Hospital      @relation(fields: [hospitalId], references: [id])
+  status      SessionStatus @default(ACTIVE)
+  startedAt   DateTime      @default(now())
+  finalizedAt DateTime?
+
+  vitals       Vitals?
+  diagnosis    Diagnosis?
+  prescription Prescription?
+
+  @@index([patientId, status])
+  @@index([doctorId])
+}
+
+model Vitals {
+  id            String   @id @default(uuid())
+  sessionId     String   @unique
+  session       Session  @relation(fields: [sessionId], references: [id])
+  temperature   Float?
+  bloodPressure String?
+  pulse         Int?
+  weightKg      Float?
+  notes         String?
+  recordedAt    DateTime @default(now())
+}
+
+model Diagnosis {
+  id         String   @id @default(uuid())
+  sessionId  String   @unique
+  session    Session  @relation(fields: [sessionId], references: [id])
+  notes      String
+  code       String?
+  recordedAt DateTime @default(now())
+}
+
+model Prescription {
+  id        String             @id @default(uuid())
+  sessionId String             @unique
+  session   Session            @relation(fields: [sessionId], references: [id])
+  createdAt DateTime           @default(now())
+
+  items PrescriptionItem[]
+}
+
+model PrescriptionItem {
+  id             String                  @id @default(uuid())
+  prescriptionId String
+  prescription   Prescription            @relation(fields: [prescriptionId], references: [id])
+  drugName       String
+  dosage         String
+  quantity       Int
+  instructions   String?
+  status         PrescriptionItemStatus  @default(PENDING)
+  dispensedById  String?
+  dispensedBy    Pharmacy?               @relation(fields: [dispensedById], references: [id])
+  dispensedAt    DateTime?
+
+  @@index([prescriptionId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Wallets
+// ---------------------------------------------------------------------------
+
+model Wallet {
+  id        String          @id @default(uuid())
+  ownerType WalletOwnerType
+  balance   Float           @default(0)
+  createdAt DateTime        @default(now())
+
+  patientId  String?  @unique
+  patient    Patient? @relation(fields: [patientId], references: [id])
+  hospitalId String?  @unique
+  hospital   Hospital? @relation(fields: [hospitalId], references: [id])
+  pharmacyId String?  @unique
+  pharmacy   Pharmacy? @relation(fields: [pharmacyId], references: [id])
+
+  transactions WalletTransaction[]
+}
+
+model WalletTransaction {
+  id                   String                     @id @default(uuid())
+  walletId             String
+  wallet               Wallet                     @relation(fields: [walletId], references: [id])
+  type                 WalletTransactionType
+  direction            WalletTransactionDirection
+  amount               Float
+  counterpartyWalletId String?
+  referenceType        String?
+  referenceId          String?
+  createdAt            DateTime                   @default(now())
+
+  @@index([walletId])
+}

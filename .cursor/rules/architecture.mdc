@@ -1,0 +1,183 @@
+---
+alwaysApply: false
+---
+# Architecture Rules - Module Organization & File Structure
+
+Adapted from `devdraft/old-repos/admin-api`'s conventions for this project's module set (auth, onboarding, sessions, wallets, pharmacy). Follow this for every module added while building the phases in [PHASES.md](../../PHASES.md).
+
+## Module Organization
+
+### Feature-Based Modules
+Each business domain gets its own top-level module under `src/`:
+```
+src/
+├── auth/              # JWT issuance, guards, OTP verification flow
+├── otp/                # OTP request/verify (hardcoded 000000 in DEMO_MODE)
+├── rbac/               # Role enum, @Roles() decorator, RolesGuard
+├── users/              # Shared User model/resolver (me query)
+├── patient/            # Self-onboarding, profile, publicId
+├── qr-token/           # Short-lived rotating QR token (Redis-backed)
+├── hospital/           # Hospital onboarding, consultationFee, hospital admin views
+├── doctor/             # Doctor onboarding (by hospital admin)
+├── session/            # Session lifecycle: start/stop, vitals, diagnosis, prescription
+├── pharmacy/           # Pharmacy onboarding, drug price list, dispense flow
+├── wallet/             # WalletProvider interface + MockWalletProvider, ledger
+├── notification/       # GraphQL subscription publishers (Redis pub/sub backed)
+├── prisma/             # PrismaService + PrismaModule
+├── graphql/            # GraphQL module wiring, shared scalars/types
+└── common/             # Shared utilities, guards, filters, redis client
+```
+
+### Standard Module Imports
+All feature modules import these core modules as needed:
+```typescript
+@Module({
+  imports: [
+    PrismaModule,                   // Database access
+    AuthModule,                     // Authentication (only if guarding own resolvers)
+    forwardRef(() => CommonModule), // Shared services (redis, etc.)
+  ],
+  providers: [FeatureService, FeatureResolver],
+  exports: [FeatureService],
+})
+```
+
+### Circular Dependencies
+Use `forwardRef()` for circular imports:
+```typescript
+// In module A that needs module B
+imports: [forwardRef(() => ModuleBModule)]
+
+// In module B that needs module A
+imports: [forwardRef(() => ModuleAModule)]
+```
+Expected circular pair in this project: `session` ↔ `wallet` (finalize charges a wallet; wallet ledger references session as `referenceId`) and `pharmacy` ↔ `wallet` (dispense charges a wallet). Resolve with `forwardRef()`, don't merge the modules.
+
+## File Organization
+
+### Naming Conventions
+- **Files/Directories**: kebab-case (`qr-token`, `prescription-item`)
+- **Classes**: PascalCase (`SessionService`, `WalletResolver`)
+- **Variables/Functions**: camelCase (`startSession`, `getWalletBalance`)
+
+### File Suffixes
+- Services: `.service.ts`
+- Resolvers: `.resolver.ts`
+- Controllers: `.controller.ts` (only if a REST endpoint is truly needed — this project is GraphQL-first, prefer resolvers)
+- DTOs / GraphQL inputs: `.dto.ts` (holds both `@InputType()` input classes and plain DTOs)
+- Models: `.model.ts` (GraphQL `@ObjectType()` classes)
+- Modules: `.module.ts`
+- Guards: `.guard.ts`
+- Enums: `.enum.ts`
+- Interfaces: `.interface.ts` (e.g. `wallet-provider.interface.ts`)
+
+### Directory Structure per Feature
+```
+feature-name/
+├── feature-name.module.ts           # Module definition
+├── feature-name.service.ts          # Business logic
+├── feature-name.resolver.ts         # GraphQL resolver (queries + mutations)
+├── dto/                              # GraphQL inputs
+│   └── create-feature.dto.ts
+├── models/                           # GraphQL object types
+│   └── feature.model.ts
+├── enums/                             # Feature-specific enums (mirror Prisma enums)
+│   └── feature-status.enum.ts
+└── interfaces/                       # Provider abstractions (e.g. wallet/wallet-provider.interface.ts)
+```
+Only add `dto/`, `models/`, `enums/`, `interfaces/` subfolders once a feature has more than one or two files of that kind — a module with a single DTO can keep `feature-name.dto.ts` flat at the module root (see `wallet.dto.ts`-style flattening in the reference repo for small modules).
+
+### Import Order
+```typescript
+// 1. Node modules
+import { Injectable, ForbiddenException } from '@nestjs/common';
+import { Args, Mutation, Resolver } from '@nestjs/graphql';
+
+// 2. Internal modules (services, common)
+import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../common/redis/redis.service';
+
+// 3. Types and interfaces
+import { Session as PrismaSession } from '@prisma/client';
+import { StartSessionInput } from './dto/start-session.dto';
+
+// 4. Local imports
+import { SessionModel } from './models/session.model';
+import { SessionStatus } from './enums/session-status.enum';
+```
+
+## Module Composition Patterns
+
+### Core Infrastructure Modules
+- `PrismaModule` — Database access (Postgres)
+- `AuthModule` — JWT guards, current-user decorator
+- `RbacModule` — `@Roles()` decorator + `RolesGuard`
+- `CommonModule` — Redis client, shared error filters
+- `NotificationModule` — subscription publish helpers, imported by any module that needs to emit a realtime event
+
+### Feature Module Template
+```typescript
+import { Module, forwardRef } from '@nestjs/common';
+import { PrismaModule } from '../prisma/prisma.module';
+import { AuthModule } from '../auth/auth.module';
+import { CommonModule } from '../common/common.module';
+
+import { FeatureService } from './feature.service';
+import { FeatureResolver } from './feature.resolver';
+
+@Module({
+  imports: [
+    PrismaModule,
+    AuthModule,
+    forwardRef(() => CommonModule),
+  ],
+  providers: [FeatureService, FeatureResolver],
+  exports: [FeatureService],
+})
+export class FeatureModule {}
+```
+
+## GraphQL Conventions
+- Code-first schema (`@nestjs/graphql` + `@nestjs/apollo`), auto-generated SDL written to `src/schema.gql` — this generated file must match [schema.graphql](../../schema.graphql) at the repo root, which is the source-of-truth contract shared with frontend. If they diverge, fix the resolver/model, not the contract file.
+- One resolver per feature module; don't scatter a feature's queries/mutations across multiple resolver files unless the feature is large enough to warrant splitting (e.g. `session.resolver.ts` vs a future `session-vitals.resolver.ts` only if it grows unwieldy).
+- Role guards applied via `@UseGuards(GqlAuthGuard, RolesGuard)` + `@Roles(Role.DOCTOR)` at the resolver method level, not globally — different fields on the same resolver can have different role requirements (e.g. `Query.me` is open to any authenticated role).
+
+## Environment & Configuration
+
+### Environment Files
+- `.env` — local development
+- `.env.example` — committed template, no real secrets
+- `.env.test` — test runs
+
+### Configuration Pattern
+```typescript
+@Injectable()
+export class SomeService {
+  constructor(private configService: ConfigService) {}
+
+  private getQrTokenTtlSeconds(): number {
+    return this.configService.get<number>('QR_TOKEN_TTL_SECONDS', 120);
+  }
+}
+```
+`DEMO_MODE=true` gates the hardcoded-OTP behavior and the `MockWalletProvider` — keep both switches named and visible in `.env.example` so they're obvious to disable before any real deployment.
+
+## Anti-Patterns to Avoid
+
+### ❌ Don't
+- Mix different business domains in one module (e.g. don't fold `pharmacy` pricing logic into `wallet`)
+- Create circular dependencies without `forwardRef()`
+- Put business logic (wallet debits, token validation) directly in resolvers — resolvers call services
+- Reintroduce a static/public patient lookup field — the QR token is deliberately short-lived and Redis-backed, not a Prisma column
+- Hand-edit the generated `src/schema.gql` — change the resolver/model and regenerate
+
+### ✅ Do
+- Keep modules focused on a single business domain from the PRD's module list
+- Mirror Prisma enums with GraphQL enums one-to-one (`SessionStatus`, `PrescriptionItemStatus`, etc.)
+- Emit notification events from the service layer right after the state change that causes them (see PRD §5.5's event table for the mapping)
+- Export only the service (not the resolver) from each module, so other modules can depend on business logic without pulling in GraphQL wiring
+
+## Reference Examples (fill in as each phase lands)
+- **Wallet abstraction pattern**: `src/wallet/wallet-provider.interface.ts` + `src/wallet/mock-wallet-provider.service.ts`
+- **Session lifecycle pattern**: `src/session/session.service.ts` (upsert-until-finalized logic)
+- **QR token pattern**: `src/qr-token/qr-token.service.ts` (Redis TTL + rotation)
